@@ -1,0 +1,62 @@
+from datetime import datetime, timedelta
+from airflow import DAG
+from airflow.operators.bash import BashOperator
+from airflow.operators.dummy import DummyOperator
+from airflow.utils.dates import days_ago
+
+default_args = {
+    'owner': 'spidyweb',
+    'retries': 0,
+    'retry_delay': timedelta(seconds=20),
+    'depends_on_past': False
+}
+
+dag_Spark_api = DAG(
+    'dag_Spark_api_id',
+    start_date=days_ago(2),
+    default_args=default_args,
+    schedule_interval='0 1 * * *',
+    catchup=False,
+    is_paused_upon_creation=False,
+)
+
+cmd="python3 /home/ubuntu/api_development_xml_pyspark.py"
+cmd2="echo ‘this server will be terminated after 7minutes’ && sleep 7m && aws ec2 terminate-instances  --instance-id $(ec2metadata --instance-id)"
+
+#시작을 알리는 dummy
+task_start = DummyOperator(
+    task_id='start',
+    dag=dag_Spark_api,
+)
+
+#시작이 끝나고 다음단계로 진행되었음을 나타내는 dummy
+task_next = DummyOperator(
+    task_id='next',
+    trigger_rule='all_success',
+    dag=dag_Spark_api,
+)
+#끝을 알리는 dummy
+task_finish = DummyOperator(
+    task_id='finish',
+    trigger_rule='all_success',
+    dag=dag_Spark_api,
+)
+
+#오늘의 목표인 bash를 통해 python file 실행시킬 BashOperator
+api_PySpark_1 = BashOperator(
+    task_id='spark_api_xml',
+    dag=dag_Spark_api,
+    trigger_rule='all_success',
+    bash_command=cmd,
+)
+
+task_terminate_server = BashOperator(
+    task_id='terminate_server',
+    dag=dag_Spark_api,
+    trigger_rule='all_success',
+    bash_command=cmd2,
+)
+
+
+#의존관계 구성
+task_start >> task_next >> api_PySpark_1 >> task_finish >> task_terminate_server

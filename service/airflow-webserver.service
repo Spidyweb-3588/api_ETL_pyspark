@@ -1,0 +1,16 @@
+[Unit]
+Description=Airflow webserver
+After=network.target mysql.service
+wants=mysql.service
+
+[Service]
+Environment="PATH=/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+User=ubuntu
+Group=ubuntu
+Type=simple
+ExecStart=/home/ubuntu/.local/bin/airflow webserver -p 8080
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
