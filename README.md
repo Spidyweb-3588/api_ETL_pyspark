@@ -1,4 +1,4 @@
-# api_ETL_pyspark
+# covid api개발+pyspark으로 데이터 처리+ airflow로 스케쥴링+mysql로 data insert+csv파일로 저장하기 project
 
 # 데이터 ETL 프로세스
 
@@ -19,7 +19,7 @@
 
 ```python
 #스파크가 pandas보다 느리고, 스파크는 큰 데이터가 아니면 의미없지만, 스파크에서 배운 data transformation을 활용 하기위해 스파크를 채택
-#with corona가 시행됨에 따라 검사수가 줄고, 검사자수, 확진자 수에 대한 데이터를 불러올 수 없게됨?
+#with corona가 시행됨에 따라 검사수를 더 이상 측정을 안하게됨
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, date, timedelta
@@ -37,6 +37,7 @@ now = datetime.now()
 today = date.today()
 oneday = timedelta(days=1)
 
+#RESTapi로 부터 데이터를 얻어온다.
 def getCovid19Info(start_date: date, end_date: date):
     url = 'http://openapi.data.go.kr/openapi/service/rest/Covid19/getCovid19InfStateJson'
     api_key_utf8 = 'mrAZG1yevJBgcaaSuVLOgJ%2BS6blzA0SXlGYZrwxwpARTaMnSotfqFooTr6dgKpPcTBtE96l0xE%2B%2BmXxDrWt19g%3D%3D'
@@ -53,7 +54,7 @@ def getCovid19Info(start_date: date, end_date: date):
     elapsed_us = response.elapsed.microseconds
     print('Reqeust Done, Elapsed: {} seconds'.format(elapsed_us / 1e6))#100만
     
-    return BeautifulSoup(content, "lxml")#python xml인 lxml로 변환
+    return BeautifulSoup(content, "lxml")#불러온 text 데이터를 python xml인 lxml로 변환
 
 #union을 통해 date, datetime 두개의 type모두 허용
 def getCovid19SparkDataFrame(start_date: Union[date, datetime], end_date: Union[date,datetime]):
@@ -69,9 +70,9 @@ def getCovid19SparkDataFrame(start_date: Union[date, datetime], end_date: Union[
         'statetime' : str,
         'updatedt' : lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S.%f'),
     }
-    #파싱 후 dictionay들의 list 형태 변환 과정 이해하기
+
     temp = getCovid19Info(start_date, end_date)
-    items = temp.find('items')
+    items = temp.find('items')#item만 추출
     item_list = []
     for item in items:
         item_dict = {}
@@ -80,7 +81,7 @@ def getCovid19SparkDataFrame(start_date: Union[date, datetime], end_date: Union[
                 item_dict[tag.name] = convert_method[tag.name](tag.text)
             except Exception:
                 item_dict[tag.name] = None
-            item_list.append(item_dict)
+        item_list.append(item_dict)#lxml데이터를 dictionary in list로 변환
 
     #dictionary의 list를 spark DataFrame으로 바꾸는 방법 dictionary 속의 key를 schema를 정의해준다.
     CovidInfo_item_Schema = StructType([
@@ -175,31 +176,35 @@ def getPeriodCovidAffectedNumbers(start_date: Union[date, datetime], end_date: U
     return df_Covid19_result_Period, start_date, end_date#이후에 함수별로 저장할 때, DF가 기간으로 입력받은 것을 알기위해 기간값도 리턴
 
 #위의 3개의 메소드를 통해 데이터프레임을 입력받아 c드라이브 covid19_result 폴더에 함수 형태에 따른csv파일로 저장
-#함수 내의 매개변수를 인식 시키는 법 찾기, class를 통해 구현, method function 구분해서 완성시키기
-# count() takes exactly one argument (0 given) 해결하기
+
 def saveDataAsCSV(dataframe):
     if type(dataframe) == tuple:
+        dataframe[0].cache()
         start_date=dataframe[1]
         end_date=dataframe[2]
         if dataframe[0].count() == getPeriodCovidAffectedNumbers(start_date, end_date)[0].count():
             print("it worked!")
             return dataframe[0].coalesce(1).write.format("csv").option("header","true").mode("overwrite").save("C:/covid19_result/period/")
     else:
+        dataframe.cache()
         if dataframe.count() == getAllCovidAffectedNumbers().count():
             print("it worked!")
             return dataframe.coalesce(1).write.format("csv").option("header","true").mode("overwrite").save("C:/covid19_result/all_day/")
         elif dataframe.count() == getTodayCovidAffectedNumbers().count():
             print("it worked!")
             return dataframe.coalesce(1).write.format("csv").option("header","true").mode("overwrite").save("C:/covid19_result/today/")
-        
+
+#파티션별로 나누어 파일 저장(daily partition별로 데이터 적재)        
 def saveDataAsPartitionCSV(dataframe):
     if type(dataframe) == tuple:
+        dataframe[0].cache()
         start_date=dataframe[1]
         end_date=dataframe[2]
         if dataframe[0].count() == getPeriodCovidAffectedNumbers(start_date, end_date)[0].count():
             print("it worked!")
             return dataframe[0].write.format("csv").option("header","true").mode("overwrite").partitionBy("기준날짜").save("C:/covid19_result/partition/period/")
     else:
+        dataframe.cache()
         if dataframe.count() == getAllCovidAffectedNumbers().count():
             print("it worked!")
             return dataframe.write.format("csv").option("header","true").mode("overwrite").partitionBy("기준날짜").save("C:/covid19_result/partition/all_day/")
@@ -207,7 +212,13 @@ def saveDataAsPartitionCSV(dataframe):
             print("it worked!")
             return dataframe.write.format("csv").option("header","true").mode("overwrite").partitionBy("기준날짜").save("C:/covid19_result/partition/today/")
 
+#mysql DB에 Covid19 DataFrame의 데이터를 저장
 def saveDataToMySQL(dataframe):
+    if type(dataframe) == tuple:
+        dataframe[0].cache()
+    else:
+        dataframe.cache()
+        
     if dataframe.count() == getAllCovidAffectedNumbers().count():
         print("insert to mysql Covid19 table")
         return dataframe.coalesce(1).write.format("jdbc").options(
@@ -295,7 +306,7 @@ def getCovid19SparkDataFrame(start_date: Union[date, datetime], end_date: Union[
                 item_dict[tag.name] = convert_method[tag.name](tag.text)
             except Exception:
                 item_dict[tag.name] = None
-            item_list.append(item_dict)
+        item_list.append(item_dict)
 
     #dictionary의 list를 spark DataFrame으로 바꾸는 방법 dictionary 속의 key를 schema를 정의해준다.
     CovidInfo_item_Schema = StructType([
@@ -394,12 +405,14 @@ def getPeriodCovidAffectedNumbers(start_date: Union[date, datetime], end_date: U
 # count() takes exactly one argument (0 given) 해결하기
 def saveDataAsCSV(dataframe):
     if type(dataframe) == tuple:
+        dataframe[0].cache()
         start_date=dataframe[1]
         end_date=dataframe[2]
         if dataframe[0].count() == getPeriodCovidAffectedNumbers(start_date, end_date)[0].count():
             print("it worked!")
             return dataframe[0].coalesce(1).write.format("csv").option("header","true").mode("overwrite").save("/home/ubuntu/covid19_result/period/")
     else:
+        dataframe.cache()
         if dataframe.count() == getAllCovidAffectedNumbers().count():
             print("it worked!")
             return dataframe.coalesce(1).write.format("csv").option("header","true").mode("overwrite").save("/home/ubuntu/covid19_result/all_day/")
@@ -409,20 +422,27 @@ def saveDataAsCSV(dataframe):
         
 def saveDataAsPartitionCSV(dataframe):
     if type(dataframe) == tuple:
+        dataframe[0].cache()
         start_date=dataframe[1]
         end_date=dataframe[2]
         if dataframe[0].count() == getPeriodCovidAffectedNumbers(start_date, end_date)[0].count():
             print("it worked!")
             return dataframe[0].write.format("csv").option("header","true").mode("overwrite").partitionBy("기준날짜").save("/home/ubuntu/covid19_result/partition/period/")
     else:
+        dataframe.cache()
         if dataframe.count() == getAllCovidAffectedNumbers().count():
             print("it worked!")
             return dataframe.write.format("csv").option("header","true").mode("overwrite").partitionBy("기준날짜").save("/home/ubuntu/covid19_result/partition/all_day/")
         elif dataframe.count() == getTodayCovidAffectedNumbers().count():
             print("it worked!")
-            return dataframe.write.format("csv").option("header","true").mode("overwrite").partitionBy("기준날짜").save("/home/ubuntu/covid19_result/partition/today/")
+            return dataframe.write.format("csv").option("header","true").mode("append").partitionBy("기준날짜").save("/home/ubuntu/covid19_result/partition/today/")
 
 def saveDataToMySQL(dataframe):
+    if type(dataframe) == tuple:
+        dataframe[0].cache()
+    else:
+        dataframe.cache()
+        
     if dataframe.count() == getAllCovidAffectedNumbers().count():
         print("insert to mysql Covid19 table")
         return dataframe.coalesce(1).write.format("jdbc").options(
@@ -434,13 +454,9 @@ def saveDataToMySQL(dataframe):
         ).mode('overwrite').save()
     
 if __name__=="__main__":
-    try:
-        print("오늘(%s)의 확진자수는 %d명입니다.\n" % (today ,getTodayCovidAffectedNumbers().first()["당일확진자수"]))#df.first()['column name'] 혹은 df.collect()[0]['column name'], 오늘의 데이터가 없을 경우 none type이 되어 에러를 낸다.try except 처리
-        print("어제보다 코로나 확진자가 %d명 늘었습니다.\n" % (getTodayCovidAffectedNumbers().first()["당일확진자수"] - 
+    print("오늘의 확진자수는 %d명입니다.\n" % getTodayCovidAffectedNumbers().first()["당일확진자수"])#df.first()['column name'] 혹은 df.collect()[0]['column name']
+    print("어제보다 코로나 확진자가 %d명 늘었습니다.\n" % (getTodayCovidAffectedNumbers().first()["당일확진자수"] - 
                                                      getPeriodCovidAffectedNumbers(today-oneday,today)[0].where(F.col("기준날짜")==str(today-oneday)).first()["당일확진자수"]))
-    except TypeError:
-        print("오늘의 데이터가 아직 입력되지 않았습니다.")
-        
     saveDataAsCSV(getAllCovidAffectedNumbers())
     saveDataAsPartitionCSV(getAllCovidAffectedNumbers())
     saveDataToMySQL(getAllCovidAffectedNumbers())
@@ -678,7 +694,7 @@ journalctl _PID=’프로세스아이디’
 
 ```bash
 [Unit]
-Description=Airflow webserver daemon
+Description=Airflow webserver
 After=network.target mysql.service
 wants=mysql.service
 
@@ -689,8 +705,7 @@ Group=ubuntu
 Type=simple
 ExecStart=/home/ubuntu/.local/bin/airflow webserver -p 8080
 Restart=on-failure
-RestartSec=5s
-PrivateTmp=true
+RestartSec=10s
 
 [Install]
 WantedBy=multi-user.target
@@ -698,7 +713,7 @@ WantedBy=multi-user.target
 
 ```bash
 [Unit]
-Description=Airflow webserver daemon
+Description=Airflow webserver
 After=network.target mysql.service
 wants=mysql.service
 
@@ -709,8 +724,7 @@ Group=ubuntu
 Type=simple
 ExecStart=/home/ubuntu/.local/bin/airflow scheduler
 Restart=on-failure
-RestartSec=5s
-PrivateTmp=true
+RestartSec=10s
 
 [Install]
 WantedBy=multi-user.target
