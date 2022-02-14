@@ -230,7 +230,7 @@ def saveDataToMySQL(dataframe):
         ).mode('overwrite').save()
     
 if __name__=="__main__":
-	today_infection_num = (getTodayCovidAffectedNumbers().first()["당일확진자수"])
+    today_infection_num = (getTodayCovidAffectedNumbers().first()["당일확진자수"])
     infection_num_diff = (getTodayCovidAffectedNumbers().first()["당일확진자수"] - 
                                                      getPeriodCovidAffectedNumbers(today-oneday,today)[0].where(F.col("기준날짜")==str(today-oneday)).first()["당일확진자수"])
     try:
@@ -459,7 +459,7 @@ def saveDataToMySQL(dataframe):
         ).mode('overwrite').save()
     
 if __name__=="__main__":
-	today_infection_num = (getTodayCovidAffectedNumbers().first()["당일확진자수"])
+    today_infection_num = (getTodayCovidAffectedNumbers().first()["당일확진자수"])
     infection_num_diff = (getTodayCovidAffectedNumbers().first()["당일확진자수"] - 
                                                      getPeriodCovidAffectedNumbers(today-oneday,today)[0].where(F.col("기준날짜")==str(today-oneday)).first()["당일확진자수"])
     try:
