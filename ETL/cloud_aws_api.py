@@ -207,10 +207,10 @@ def saveDataToMySQL(dataframe):
         ).mode('overwrite').save()
     
 if __name__=="__main__":
-	today_infection_num = (getTodayCovidAffectedNumbers().first()["당일확진자수"])
-    infection_num_diff = (getTodayCovidAffectedNumbers().first()["당일확진자수"] - 
-                                                     getPeriodCovidAffectedNumbers(today-oneday,today)[0].where(F.col("기준날짜")==str(today-oneday)).first()["당일확진자수"])
     try:
+        today_infection_num = (getTodayCovidAffectedNumbers().first()["당일확진자수"])
+        infection_num_diff = (getTodayCovidAffectedNumbers().first()["당일확진자수"] - 
+                                                     getPeriodCovidAffectedNumbers(today-oneday,today)[0].where(F.col("기준날짜")==str(today-oneday)).first()["당일확진자수"])
         print("오늘(%s)의 확진자수는 %d명입니다.\n" % (today, today_infection_num))#df.first()['column name'] 혹은 df.collect()[0]['column name'], 오늘의 데이터가 없을 경우 none type이 되어 에러를 낸다.try except 처리
         if infection_num_diff >= 0:
             print("어제보다 코로나 확진자가 %d명 늘었습니다.\n" % (infection_num_diff))
@@ -218,7 +218,7 @@ if __name__=="__main__":
             print("어제보다 코로나 확진자가 %d명 줄었습니다.\n" % (-infection_num_diff))
     except TypeError:
         print("오늘의 데이터가 아직 입력되지 않았습니다.")
-    
+        
     saveDataAsCSV(getAllCovidAffectedNumbers())
     saveDataAsPartitionCSV(getAllCovidAffectedNumbers())
     saveDataToMySQL(getAllCovidAffectedNumbers())
