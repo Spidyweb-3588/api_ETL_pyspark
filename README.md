@@ -502,7 +502,9 @@ dag_Spark_api = DAG(
 )
 
 cmd="python3 /home/ubuntu/api_development_xml_pyspark.py"
-cmd2="echo ‘this server will be terminated after 7minutes’ && sleep 7m && aws ec2 terminate-instances  --instance-id $(ec2metadata --instance-id)"
+cmd2="echo 'copying api_result files to S3' && aws s3 sync /home/ubuntu/covid19_result/partition/all_day/ s3://api-pyspark-airflow-1/api_results_partitioned/ && aws s3 sync /home/ubuntu/covid19_result/all_day/ s3://api-pyspark-airflow-1/api_results_onefile/"
+cmd3="echo 'copying airflow log files to S3' && aws s3 sync /home/ubuntu/airflow/logs/dag_Spark_api_id/spark_api_xml/ s3://api-pyspark-airflow-1/api_airflow_logs/"
+cmd4="echo ‘this server will be terminated after 7minutes’ && sleep 7m && aws ec2 terminate-instances  --instance-id $(ec2metadata --instance-id)"
 
 #시작을 알리는 dummy
 task_start = DummyOperator(
@@ -531,15 +533,33 @@ api_PySpark_1 = BashOperator(
     bash_command=cmd,
 )
 
-task_terminate_server = BashOperator(
-    task_id='terminate_server',
+#생성된 spark 결과물 파일을 s3로 복사하는 BashOperator
+task_Copy_results_to_S3 = BashOperator(
+    task_id='copy_results',
     dag=dag_Spark_api,
     trigger_rule='all_success',
     bash_command=cmd2,
 )
 
+#airflow log files 를 s3로 보내는 BashOperator
+task_Copy_Log_to_S3 = BashOperator(
+    task_id='copy_log',
+    dag=dag_Spark_api,
+    trigger_rule='all_success',
+    bash_command=cmd3,
+)
+
+#ec2를 종료시키는 BashOperator
+task_terminate_server = BashOperator(
+    task_id='terminate_server',
+    dag=dag_Spark_api,
+    trigger_rule='all_success',
+    bash_command=cmd4,
+)
+
+
 #의존관계 구성
-task_start >> task_next >> api_PySpark_1 >> task_finish >> task_terminate_server
+task_start >> task_next >> api_PySpark_1 >> task_Copy_results_to_S3 >>  task_Copy_Log_to_S3 >> task_finish >> task_terminate_server
 ```
 
 ---
