@@ -230,10 +230,10 @@ def saveDataToMySQL(dataframe):
         ).mode('overwrite').save()
     
 if __name__=="__main__":
-    today_infection_num = (getTodayCovidAffectedNumbers().first()["당일확진자수"])
-    infection_num_diff = (getTodayCovidAffectedNumbers().first()["당일확진자수"] - 
-                                                     getPeriodCovidAffectedNumbers(today-oneday,today)[0].where(F.col("기준날짜")==str(today-oneday)).first()["당일확진자수"])
     try:
+        today_infection_num = (getTodayCovidAffectedNumbers().first()["당일확진자수"])
+        infection_num_diff = (getTodayCovidAffectedNumbers().first()["당일확진자수"] - 
+                                                     getPeriodCovidAffectedNumbers(today-oneday,today)[0].where(F.col("기준날짜")==str(today-oneday)).first()["당일확진자수"])
         print("오늘(%s)의 확진자수는 %d명입니다.\n" % (today, today_infection_num))#df.first()['column name'] 혹은 df.collect()[0]['column name'], 오늘의 데이터가 없을 경우 none type이 되어 에러를 낸다.try except 처리
         if infection_num_diff >= 0:
             print("어제보다 코로나 확진자가 %d명 늘었습니다.\n" % (infection_num_diff))
@@ -459,10 +459,10 @@ def saveDataToMySQL(dataframe):
         ).mode('overwrite').save()
     
 if __name__=="__main__":
-    today_infection_num = (getTodayCovidAffectedNumbers().first()["당일확진자수"])
-    infection_num_diff = (getTodayCovidAffectedNumbers().first()["당일확진자수"] - 
-                                                     getPeriodCovidAffectedNumbers(today-oneday,today)[0].where(F.col("기준날짜")==str(today-oneday)).first()["당일확진자수"])
     try:
+        today_infection_num = (getTodayCovidAffectedNumbers().first()["당일확진자수"])
+        infection_num_diff = (getTodayCovidAffectedNumbers().first()["당일확진자수"] - 
+                                                     getPeriodCovidAffectedNumbers(today-oneday,today)[0].where(F.col("기준날짜")==str(today-oneday)).first()["당일확진자수"])
         print("오늘(%s)의 확진자수는 %d명입니다.\n" % (today, today_infection_num))#df.first()['column name'] 혹은 df.collect()[0]['column name'], 오늘의 데이터가 없을 경우 none type이 되어 에러를 낸다.try except 처리
         if infection_num_diff >= 0:
             print("어제보다 코로나 확진자가 %d명 늘었습니다.\n" % (infection_num_diff))
@@ -502,7 +502,9 @@ dag_Spark_api = DAG(
 )
 
 cmd="python3 /home/ubuntu/api_development_xml_pyspark.py"
-cmd2="echo ‘this server will be terminated after 7minutes’ && sleep 7m && aws ec2 terminate-instances  --instance-id $(ec2metadata --instance-id)"
+cmd2="echo 'copying api_result files to S3' && aws s3 sync /home/ubuntu/covid19_result/partition/all_day/ s3://api-pyspark-airflow-1/api_results_partitioned/ && aws s3 sync /home/ubuntu/covid19_result/all_day/ s3://api-pyspark-airflow-1/api_results_onefile/"
+cmd3="echo 'copying airflow log files to S3' && aws s3 sync /home/ubuntu/airflow/logs/dag_Spark_api_batch/spark_api_xml/ s3://api-pyspark-airflow-1/api_airflow_logs/"
+cmd4="echo ‘this server will be terminated after 7minutes’ && sleep 7m && aws ec2 terminate-instances  --instance-id $(ec2metadata --instance-id)"
 
 #시작을 알리는 dummy
 task_start = DummyOperator(
@@ -531,15 +533,33 @@ api_PySpark_1 = BashOperator(
     bash_command=cmd,
 )
 
-task_terminate_server = BashOperator(
-    task_id='terminate_server',
+#생성된 spark 결과물 파일을 s3로 복사하는 BashOperator
+task_Copy_results_to_S3 = BashOperator(
+    task_id='copy_results',
     dag=dag_Spark_api,
     trigger_rule='all_success',
     bash_command=cmd2,
 )
 
+#airflow log files 를 s3로 보내는 BashOperator
+task_Copy_Log_to_S3 = BashOperator(
+    task_id='copy_log',
+    dag=dag_Spark_api,
+    trigger_rule='all_success',
+    bash_command=cmd3,
+)
+
+#ec2를 종료시키는 BashOperator
+task_terminate_server = BashOperator(
+    task_id='terminate_server',
+    dag=dag_Spark_api,
+    trigger_rule='all_success',
+    bash_command=cmd4,
+)
+
+
 #의존관계 구성
-task_start >> task_next >> api_PySpark_1 >> task_finish >> task_terminate_server
+task_start >> task_next >> api_PySpark_1 >> task_Copy_results_to_S3 >>  task_Copy_Log_to_S3 >> task_finish >> task_terminate_server
 ```
 
 ---
@@ -745,8 +765,23 @@ WantedBy=multi-user.target
 ```
 
 ---
+**S3로 파일을 복사하기 단일 파일, partition된 파일 복사**
 
-**테스트환경 순서(80프로 완성)**
+- **디렉토리 복사**
+
+aws s3 sync /home/ubuntu/covid19_result/partition/all_day/ s3://api-pyspark-airflow-1/api_results_partitioned/
+
+- **파일 복사**
+
+aws s3 sync /home/ubuntu/covid19_result/all_day/ s3://api-pyspark-airflow-1/api_results_onefile/
+
+- **로그 파일 복사**
+
+aws s3 sync /home/ubuntu/airflow/logs/dag_Spark_api_id/spark_api_xml/ s3://api-pyspark-airflow-1/api_airflow_logs/
+
+---
+
+**테스트환경 순서(완성)**
 
 로컬 jupyter→ local vm ubuntu → amazon ec2 ubuntu
 
@@ -758,7 +793,7 @@ WantedBy=multi-user.target
 
 ---
 
-**데이터 수집, 처리 성능(미완성)**
+**데이터 수집, 처리 성능(완성)**
 
 데이터 여러번 scan하는 과정 줄이기
 
@@ -767,6 +802,15 @@ pyspark cached 활용 혹은api데이터 받은 것을 변수로써 저장하여
 76.6초 cached 8core
 
 87초 non cahced 8core
+
+---
+
+**cache()**
+
+- cache는 함수 호출부터 실행 끝날 때 까지만 유지되는가? →  o? 맞는지 나중에 수행
+- cache는 인자로 받은 dataframe으로 cache하면 함수 호출 형태로 dataframe을 불러와도 같은 것으로 인식하지 않아 cache의 효과를 보지 못하는가?→ == 처럼 boolean으로 표현해볼 시 false로 나온다.
+- cache()를 해도 count()에는 영향을 주지 않는다? → x cache는 lazy execution이라 count때 첫 호출되어서 save때 영향을 받은 것
+- 함수().cache()는 cache가 되지 않는다.
 
 ---
 
@@ -786,3 +830,6 @@ pyspark cached 활용 혹은api데이터 받은 것을 변수로써 저장하여
 - venv의 이점과 환경 변수가 어떻게 적용되는 지, airflow가 venv안에 설치된다면?
 - boto3
 - 왜 saveDataAsCSV(getTodayCovidAffectedNumbers())는 3번을 데이터 불러오는지 찾아내기
+- cache 이후엔 release??
+- EMR에서 s3에 파일도 마찬가지로 access, secret, jar 파일 2개?
+- airflow에서 자체적으로 s3에 로그파일 생성시키는 법
