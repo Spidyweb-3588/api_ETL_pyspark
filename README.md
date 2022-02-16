@@ -503,7 +503,7 @@ dag_Spark_api = DAG(
 
 cmd="python3 /home/ubuntu/api_development_xml_pyspark.py"
 cmd2="echo 'copying api_result files to S3' && aws s3 sync /home/ubuntu/covid19_result/partition/all_day/ s3://api-pyspark-airflow-1/api_results_partitioned/ && aws s3 sync /home/ubuntu/covid19_result/all_day/ s3://api-pyspark-airflow-1/api_results_onefile/"
-cmd3="echo 'copying airflow log files to S3' && aws s3 sync /home/ubuntu/airflow/logs/dag_Spark_api_id/spark_api_xml/ s3://api-pyspark-airflow-1/api_airflow_logs/"
+cmd3="echo 'copying airflow log files to S3' && aws s3 sync /home/ubuntu/airflow/logs/dag_Spark_api_batch/spark_api_xml/ s3://api-pyspark-airflow-1/api_airflow_logs/"
 cmd4="echo ‘this server will be terminated after 7minutes’ && sleep 7m && aws ec2 terminate-instances  --instance-id $(ec2metadata --instance-id)"
 
 #시작을 알리는 dummy
