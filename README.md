@@ -706,25 +706,13 @@ mkdir dags
 
 --email admin@spidyweb.com
 
-systemd에 등록
-
-아직 시작 x
-
-dags에 파일 작성
-
 aws cli기반으로 변수설정 하고,aws configure이후에 끄는 명령어 실행
 
-airflow로 shell script 통해 aws ec2 terminate-instances --instance-id $EC2ID 먹히는지 확인하기(2022-02-10) 
+airflow로 shell script 통해 aws ec2 terminate-instances --instance-id $EC2ID 먹히는지 확인하기(2022-02-10) ->안먹힌다
 
 **systemd 에 airflow-webserver.service airflow-scheduler.service 등록하기**
 
-db를 아예 mysql로 바꿔서 진행해보기
-
-잘 안되는 로그 보기
-
 journalctl _PID=’프로세스아이디’
-
-설정자체는 2개다 맞는거고 띄워지기도하는데 스케쥴된dag가 db를 참조 못하는 느낌?
 
 ```bash
 [Unit]
@@ -818,8 +806,8 @@ pyspark cached 활용 혹은api데이터 받은 것을 변수로써 저장하여
 
 - json normalize json flatten parquet변환 (xml이아닌 json으로써 데이터 다루기)
 - json 밑 dictionary형태로 mongodb저장하기
-- lambda와 cloudwatch로 ec2 자동으로 띄우고 내리기
-- boto3로ec2띄우고 내리기(with airflow?)
+- lambda와 cloudformation로 ec2 자동으로 띄우고 내리기
+- boto3로 ec2띄우고 내리기(with airflow?)
 - airflow 변수 인식 argparse? 아니면 airflow variable에 변수 등록가능?
 
 ---
@@ -833,3 +821,4 @@ pyspark cached 활용 혹은api데이터 받은 것을 변수로써 저장하여
 - cache 이후엔 release??
 - EMR에서 s3에 파일도 마찬가지로 access, secret, jar 파일 2개?
 - airflow에서 자체적으로 s3에 로그파일 생성시키는 법
+- EC2에서 S3로 직접 pyspark를 통해 파일 쓰기
