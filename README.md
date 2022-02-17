@@ -805,9 +805,8 @@ pyspark cached 활용 혹은api데이터 받은 것을 변수로써 저장하여
 **추후에 도전해볼 과제(미완성)**
 
 - json normalize json flatten parquet변환 (xml이아닌 json으로써 데이터 다루기)
-- json 밑 dictionary형태로 mongodb저장하기
-- lambda와 cloudformation로 ec2 자동으로 띄우고 내리기
-- boto3로 ec2띄우고 내리기(with airflow?)
+- lambda([https://nyyang.tistory.com/67](https://nyyang.tistory.com/67))와 cloudformation([https://medium.com/pplink/aws-cloudformation으로-인프라-자동화-시작하기-9fe13cdf08c9](https://medium.com/pplink/aws-cloudformation%EC%9C%BC%EB%A1%9C-%EC%9D%B8%ED%94%84%EB%9D%BC-%EC%9E%90%EB%8F%99%ED%99%94-%EC%8B%9C%EC%9E%91%ED%95%98%EA%B8%B0-9fe13cdf08c9)), teraform([https://newdeal123.tistory.com/75](https://newdeal123.tistory.com/75))로 ec2 자동으로 띄우고 내리기
+- boto3로 s3로 파일 전송? (with airflow?)
 - airflow 변수 인식 argparse? 아니면 airflow variable에 변수 등록가능?
 
 ---
